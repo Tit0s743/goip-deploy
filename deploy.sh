@@ -1,19 +1,17 @@
-cat << 'EOF' > deploy.sh
 #!/bin/bash
-set -e
 
+# Надежный парсинг аргументов
 GATEWAY_NAME="RU666_SIM"
 EXT_START=101
 EXT_END=132
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-        --gateway-name) GATEWAY_NAME="$2"; shift ;;
-        --ext-start) EXT_START="$2"; shift ;;
-        --ext-end) EXT_END="$2"; shift ;;
+        --gateway-name) GATEWAY_NAME="$2"; shift 2 ;;
+        --ext-start) EXT_START="$2"; shift 2 ;;
+        --ext-end) EXT_END="$2"; shift 2 ;;
         *) echo "⚠️ Неизвестный параметр: $1"; exit 1 ;;
     esac
-    shift
 done
 
 SERVER_IP=$(hostname -I | awk '{print $1}')
@@ -24,19 +22,28 @@ RADM_PASS=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9')
 RADM_KEY=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9')
 GATEWAY_PASS=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9')
 
-echo "🚀 Развертывание DBL GoIP + Asterisk | IP: $SERVER_IP | Шлюз: $GATEWAY_NAME"
+echo "🚀 Развертывание DBL GoIP + Asterisk"
+echo "🌐 IP: $SERVER_IP | Шлюз: $GATEWAY_NAME | Экстеншены: $EXT_START-$EXT_END"
 
-echo "[1/8] Обновление и установка пакетов..."
-apt-get update -qq && apt-get upgrade -y -qq
+echo "[1/8] Обновление системы и установка пакетов..."
+apt-get update -y -qq
+apt-get upgrade -y -qq
 apt-get install -y ca-certificates curl gnupg lsb-release asterisk
+
 mkdir -p /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-apt-get update -qq && apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+apt-get update -y -qq
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
 echo "[2/8] Клонирование репозитория..."
-rm -rf /opt/goip && cd /opt
-git clone --branch goip-no-aster https://github.com/VoipBuilders/goip.git && cd /opt/goip
+rm -rf /opt/goip
+cd /opt || { echo "❌ Ошибка: нет доступа к /opt"; exit 1; }
+if ! git clone --branch goip-no-aster https://github.com/VoipBuilders/goip.git; then
+    echo "❌ Ошибка клонирования. Проверьте интернет."
+    exit 1
+fi
+cd /opt/goip || exit 1
 
 echo "[3/8] Подготовка docker-compose.yaml..."
 sed -i 's/# *entrypoint: \[ "\/install.sh" \]/entrypoint: [ "\/bin\/sh", "-c", "touch \/asterisk.sql \&\& \/install.sh" ]/' docker-compose.yaml
@@ -52,7 +59,9 @@ grep -q "^RADM_KEY=" security/radmin.env || echo "RADM_KEY=${RADM_KEY}" >> secur
 
 echo "[5/8] Инициализация БД..."
 docker compose up -d
-while docker compose ps install 2>/dev/null | grep -q "Up"; do sleep 5; done
+while docker compose ps install 2>/dev/null | grep -q "Up"; do 
+    sleep 5
+done
 echo "✅ БД инициализирована."
 
 echo "[6/8] Переключение в боевой режим..."
@@ -89,37 +98,4 @@ cat << CREDS > $DOST_FILE
 💬 Sim Bank Scheduler Server
 http://${SERVER_IP}:8188/smb/index.php?lan=3
 Логин: ${SMB_WEB_USER}
-Пароль: ${SMB_WEB_PASS}
-
-🎴 GoIP SMS Manage Server
-http://${SERVER_IP}:8080/goip/en/index.php
-Логин: admin
-Пароль: ${GOIP_WEB_PASS}
-
-🚦 Remote Server
-http://${SERVER_IP}:8086
-Логин: admin
-Пароль: ${RADM_PASS}
-Key: ${RADM_KEY}
-
-Прописали Вам шлюз ${GATEWAY_NAME}
-Логин: admin
-Пароль: ${GATEWAY_PASS}
-
-Данные для подключения по ☎️ SIP:
-${SERVER_IP}:5090
-
-CREDS
-
-echo "${EXT_START}-${EXT_END} <----> ${GATEWAY_NAME}" >> $DOST_FILE
-for i in $(seq $EXT_START $EXT_END); do
-    echo "$i <--> SIM$((i - EXT_START + 1))" >> $DOST_FILE
-done
-echo "" >> $DOST_FILE
-[ -f ext_temp ] && grep -E "^(username|password)=" ext_temp | xargs -n 2 >> $DOST_FILE
-
-chmod 600 $DOST_FILE
-echo "✅ ГОТОВО. Файл доступов: /opt/goip/dost.txt"
-cat $DOST_FILE
-EOF
-chmod +x deploy.sh
+Пароль: ${SMB_WEB
