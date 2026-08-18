@@ -89,7 +89,6 @@ asterisk -rx "dialplan reload" > /dev/null 2>&1 || true
 echo "[8/8] Генерация файла доступов..."
 DOST_FILE="/opt/goip/dost.txt"
 
-# Используем блок echo вместо heredoc, чтобы избежать ошибок парсинга из-за GitHub
 {
     echo "⚙️ Ниже Ваши новые настройки:"
     echo ""
@@ -99,7 +98,7 @@ DOST_FILE="/opt/goip/dost.txt"
     echo "Пароль: ${SMB_WEB_PASS}"
     echo ""
     echo "🎴 GoIP SMS Manage Server"
-    echo "http://${SERVER_IP}:8080/goip/en/index.php"
+    echo "http://${SERVER_IP}:8188/goip/en/index.php"
     echo "Логин: admin"
     echo "Пароль: ${GOIP_WEB_PASS}"
     echo ""
