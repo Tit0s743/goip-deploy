@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# Надежный парсинг аргументов
 GATEWAY_NAME="RU666_SIM"
 EXT_START=101
 EXT_END=132
@@ -39,10 +38,7 @@ apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 echo "[2/8] Клонирование репозитория..."
 rm -rf /opt/goip
 cd /opt || { echo "❌ Ошибка: нет доступа к /opt"; exit 1; }
-if ! git clone --branch goip-no-aster https://github.com/VoipBuilders/goip.git; then
-    echo "❌ Ошибка клонирования. Проверьте интернет."
-    exit 1
-fi
+git clone --branch goip-no-aster https://github.com/VoipBuilders/goip.git || { echo "❌ Ошибка клонирования"; exit 1; }
 cd /opt/goip || exit 1
 
 echo "[3/8] Подготовка docker-compose.yaml..."
@@ -92,10 +88,49 @@ asterisk -rx "dialplan reload" > /dev/null 2>&1 || true
 
 echo "[8/8] Генерация файла доступов..."
 DOST_FILE="/opt/goip/dost.txt"
-cat << CREDS > $DOST_FILE
-⚙️ Ниже Ваши новые настройки:
 
-💬 Sim Bank Scheduler Server
-http://${SERVER_IP}:8188/smb/index.php?lan=3
-Логин: ${SMB_WEB_USER}
-Пароль: ${SMB_WEB
+# Используем блок echo вместо heredoc, чтобы избежать ошибок парсинга из-за GitHub
+{
+    echo "⚙️ Ниже Ваши новые настройки:"
+    echo ""
+    echo "💬 Sim Bank Scheduler Server"
+    echo "http://${SERVER_IP}:8188/smb/index.php?lan=3"
+    echo "Логин: ${SMB_WEB_USER}"
+    echo "Пароль: ${SMB_WEB_PASS}"
+    echo ""
+    echo "🎴 GoIP SMS Manage Server"
+    echo "http://${SERVER_IP}:8080/goip/en/index.php"
+    echo "Логин: admin"
+    echo "Пароль: ${GOIP_WEB_PASS}"
+    echo ""
+    echo "🚦 Remote Server"
+    echo "http://${SERVER_IP}:8086"
+    echo "Логин: admin"
+    echo "Пароль: ${RADM_PASS}"
+    echo "Key: ${RADM_KEY}"
+    echo ""
+    echo "Прописали Вам шлюз ${GATEWAY_NAME}"
+    echo "Логин: admin"
+    echo "Пароль: ${GATEWAY_PASS}"
+    echo ""
+    echo "Данные для подключения по ☎️ SIP:"
+    echo "${SERVER_IP}:5090"
+    echo ""
+    echo "${EXT_START}-${EXT_END} <----> ${GATEWAY_NAME}"
+    
+    for i in $(seq $EXT_START $EXT_END); do
+        echo "$i <--> SIM$((i - EXT_START + 1))"
+    done
+    echo ""
+    
+    if [ -f ext_temp ]; then
+        grep -E "^(username|password)=" ext_temp | xargs -n 2
+    fi
+} > "$DOST_FILE"
+
+chmod 600 "$DOST_FILE"
+echo "=========================================="
+echo "✅ РАЗВЕРТЫВАНИЕ ЗАВЕРШЕНО УСПЕШНО!"
+echo "📁 Файл доступов: /opt/goip/dost.txt"
+echo "=========================================="
+cat "$DOST_FILE"
